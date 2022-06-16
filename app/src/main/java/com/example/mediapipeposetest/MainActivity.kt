@@ -27,8 +27,12 @@ import android.view.ViewGroup
 import androidx.appcompat.app.AppCompatActivity
 import com.google.mediapipe.components.*
 import com.google.mediapipe.components.CameraHelper.OnCameraStartedListener
+import com.google.mediapipe.formats.proto.LandmarkProto.NormalizedLandmarkList
 import com.google.mediapipe.framework.AndroidAssetUtil
+import com.google.mediapipe.framework.Packet
+import com.google.mediapipe.framework.PacketGetter
 import com.google.mediapipe.glutil.EglManager
+import com.google.protobuf.InvalidProtocolBufferException
 
 
 class MainActivity : AppCompatActivity() {
@@ -90,6 +94,19 @@ class MainActivity : AppCompatActivity() {
             OUTPUT_VIDEO_STREAM_NAME
         )
 
+        processor!!.addPacketCallback(
+            OUTPUT_LANDMARK_STREAM_NAME
+        ) { packet: Packet ->
+            Log.v(LOG_TAG, "Received pose landmarks packet.")
+            try {
+                val poseLandmarks = PacketGetter.getProtoBytes(packet)
+                val landmarks: NormalizedLandmarkList = NormalizedLandmarkList.parseFrom(poseLandmarks)
+                Log.v(LOG_TAG, "[TS:" + packet.timestamp + "] ${landmarks}" )
+            } catch (exception: InvalidProtocolBufferException) {
+                Log.e(LOG_TAG, "Failed to get proto.", exception)
+            }
+        }
+
         // Request Camera Permission.
         PermissionHelper.checkAndRequestCameraPermissions(this)
     }
@@ -113,7 +130,7 @@ class MainActivity : AppCompatActivity() {
         converter?.close() ?:let { Log.e(LOG_TAG, "ExternalTextureConverter has not be initialized.") }
     }
 
-    //------------------------------------- Permission Functions ---------------------------------------
+//------------------------------------- Permission Functions ---------------------------------------
 
 
     override fun onRequestPermissionsResult(
@@ -181,4 +198,19 @@ class MainActivity : AppCompatActivity() {
             ?.startCamera(this, CAMERA_FACING, null)
             ?:let { Log.e(LOG_TAG, "Camera Helper is NULL!") }
     }
+
+
+//------------------------------------- Pose Landmark ----------------------------------------------
+
+
+    private fun getPoseLandmarksDebugString(poseLandmarks: NormalizedLandmarkList): String? {
+        var poseLandmarkStr = """ Pose landmarks: ${poseLandmarks.landmarkCount} """.trimIndent()
+        var landmarkIndex = 0
+        for (landmark in poseLandmarks.landmarkList) {
+            poseLandmarkStr += """ Landmark [$landmarkIndex]: (${landmark.x}, ${landmark.y}, ${landmark.z}) """
+            ++landmarkIndex
+        }
+        return poseLandmarkStr
+    }
+
 }
