@@ -24,6 +24,7 @@ import android.view.SurfaceHolder
 import android.view.SurfaceView
 import android.view.View
 import android.view.ViewGroup
+import android.widget.Button
 import androidx.appcompat.app.AppCompatActivity
 import com.google.mediapipe.components.*
 import com.google.mediapipe.components.CameraHelper.OnCameraStartedListener
@@ -44,8 +45,7 @@ class MainActivity : AppCompatActivity() {
         const val INPUT_VIDEO_STREAM_NAME = "input_video"
         const val OUTPUT_VIDEO_STREAM_NAME = "output_video"
         const val OUTPUT_LANDMARK_STREAM_NAME = "pose_landmarks"
-        const val NUM_HANDS = 2
-        val CAMERA_FACING: CameraHelper.CameraFacing = CameraHelper.CameraFacing.FRONT
+        val CAMERA_FACING: CameraHelper.CameraFacing = CameraHelper.CameraFacing.BACK
         const val FLIP_FRAMES_VERTICALLY = false
 
         init {
@@ -53,6 +53,8 @@ class MainActivity : AppCompatActivity() {
             System.loadLibrary("opencv_java3")
         }
     }
+
+    private lateinit var skeletonShowingBtn: Button
 
     /** Camera Showing in Activity. */
     // {@link SurfaceTexture} where the camera-preview frames can be accessed.
@@ -80,12 +82,19 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
+        skeletonShowingBtn = findViewById(R.id.skeletonShowingBtn)
+
         previewDisplayView = SurfaceView(this)
         setupPreviewDisplayView()
 
         AndroidAssetUtil.initializeNativeAssetManager(this)
         eglManager = EglManager(null)
 
+        /**
+         * If we change the output stream to null, nothing will show in the screen.
+         * If we change the output stream to OUTPUT_VIDEO_STREAM_NAME, skeleton will show.
+         * If we change the output stream to INPUT_VIDEO_STREAM_NAME, the camera without skeleton will show.
+         * */
         processor = FrameProcessor(
             this,
             eglManager!!.nativeContext,
@@ -101,10 +110,14 @@ class MainActivity : AppCompatActivity() {
             try {
                 val poseLandmarks = PacketGetter.getProtoBytes(packet)
                 val landmarks: NormalizedLandmarkList = NormalizedLandmarkList.parseFrom(poseLandmarks)
-                Log.v(LOG_TAG, "[TS:" + packet.timestamp + "] ${landmarks}" )
+                // Log.i(LOG_TAG, "[TS:" + packet.timestamp + "] ${landmarks}" )
+                Log.i(LOG_TAG, "The length of landmarks is ${landmarks.landmarkCount}")
             } catch (exception: InvalidProtocolBufferException) {
                 Log.e(LOG_TAG, "Failed to get proto.", exception)
             }
+        }
+
+        skeletonShowingBtn.setOnClickListener {
         }
 
         // Request Camera Permission.
@@ -185,6 +198,7 @@ class MainActivity : AppCompatActivity() {
 
 
 //------------------------------------- Camera Functions -------------------------------------------
+
 
     fun startCamera() {
         cameraHelper = CameraXPreviewHelper()

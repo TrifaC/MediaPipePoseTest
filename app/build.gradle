@@ -33,7 +33,7 @@ android {
 
 dependencies {
 
-    implementation fileTree(dir: 'libs', include: ['*.jar', '*.aar'])
+    implementation fileTree(dir: 'libs', include: ['*.jar', 'mediapipe_pose_tracking_gpu.aar'])
 
     // Initial Implementation Setting.
     implementation 'androidx.core:core-ktx:1.7.0'
