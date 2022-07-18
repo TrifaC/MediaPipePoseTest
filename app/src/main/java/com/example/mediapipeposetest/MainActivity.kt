@@ -91,7 +91,16 @@ class MainActivity : AppCompatActivity() {
         skeletonShowingBtn = findViewById(R.id.skeletonShowingBtn)
 
         skeletonShowingBtn.setOnClickListener {
-
+            onPause()
+            onStop()
+            onRestart()
+            eglManager = null
+            converter = null
+            processor = null
+            eglManager = EglManager(null)
+            initializeProcessor(INPUT_VIDEO_STREAM_NAME)
+            onStart()
+            onResume()
         }
 
         previewDisplayView = SurfaceView(this)
@@ -122,7 +131,6 @@ class MainActivity : AppCompatActivity() {
         }?:let{
             Log.e(LOG_TAG, "EglManager has not be initialized.")
         }
-
         if (PermissionHelper.cameraPermissionsGranted(this)) {
             startCamera(CAMERA_FACING_FRONT)
         }
@@ -131,8 +139,9 @@ class MainActivity : AppCompatActivity() {
     override fun onPause() {
         super.onPause()
         Log.i(LOG_TAG, "onPause, run.")
-
-        converter?.close() ?:let { Log.e(LOG_TAG, "ExternalTextureConverter has not be initialized.") }
+        converter
+            ?.close()
+            ?:let { Log.e(LOG_TAG, "ExternalTextureConverter has not be initialized.") }
     }
 
     override fun onStop() {
@@ -174,14 +183,13 @@ class MainActivity : AppCompatActivity() {
         processor!!.addPacketCallback(
             OUTPUT_LANDMARK_STREAM_NAME
         ) { packet: Packet ->
-            Log.v(LOG_TAG, "Received pose landmarks packet.")
             try {
                 val poseLandmarks = PacketGetter.getProtoBytes(packet)
                 val landmarks: NormalizedLandmarkList = NormalizedLandmarkList.parseFrom(poseLandmarks)
                 val noseX = landmarks.landmarkList[0].x
                 val noseY = landmarks.landmarkList[0].y
                 val noseVisibility = landmarks.landmarkList[0].visibility
-                Log.i(LOG_TAG, "The nose x: $noseX, nose y: $noseY, nose visibility: $noseVisibility")
+                Log.i(LOG_TAG, "The position of nose is ( ${noseX}, ${noseY})")
             } catch (exception: InvalidProtocolBufferException) {
                 Log.e(LOG_TAG, "Failed to get proto.", exception)
             }
