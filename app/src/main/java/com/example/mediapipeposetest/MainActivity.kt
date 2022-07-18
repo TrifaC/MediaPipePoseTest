@@ -16,9 +16,7 @@
 
 package com.example.mediapipeposetest
 
-import android.content.Intent
 import android.graphics.SurfaceTexture
-import android.opengl.Visibility
 import android.os.Bundle
 import android.util.Log
 import android.util.Size
@@ -42,12 +40,14 @@ class MainActivity : AppCompatActivity() {
         const val LOG_TAG: String = "MainActivity"
 
         const val BINARY_GRAPH_NAME = "pose_tracking_gpu.binarypb"
-        const val INPUT_VIDEO_STREAM_NAME = "input_video"
-        const val OUTPUT_VIDEO_STREAM_NAME = "output_video"
+        const val ORIGINAL_VIDEO_STREAM = "input_video"
+        const val PROCESSED_VIDEO_STREAM = "output_video"
         const val OUTPUT_LANDMARK_STREAM_NAME = "pose_landmarks"
 
         val CAMERA_FACING_BACK: CameraHelper.CameraFacing = CameraHelper.CameraFacing.BACK
         val CAMERA_FACING_FRONT: CameraHelper.CameraFacing = CameraHelper.CameraFacing.FRONT
+
+        var outputVideoStream: String = PROCESSED_VIDEO_STREAM
 
         const val FLIP_FRAMES_VERTICALLY = false
 
@@ -89,18 +89,8 @@ class MainActivity : AppCompatActivity() {
         setContentView(R.layout.activity_main)
 
         skeletonShowingBtn = findViewById(R.id.skeletonShowingBtn)
-
         skeletonShowingBtn.setOnClickListener {
-            onPause()
-            onStop()
-            onRestart()
-            eglManager = null
-            converter = null
-            processor = null
-            eglManager = EglManager(null)
-            initializeProcessor(INPUT_VIDEO_STREAM_NAME)
-            onStart()
-            onResume()
+            toggleSkeletonShowing()
         }
 
         previewDisplayView = SurfaceView(this)
@@ -109,63 +99,37 @@ class MainActivity : AppCompatActivity() {
         AndroidAssetUtil.initializeNativeAssetManager(this)
         eglManager = EglManager(null)
 
-        initializeProcessor(OUTPUT_VIDEO_STREAM_NAME)
+        initializeProcessor()
 
         // Request Camera Permission.
         PermissionHelper.checkAndRequestCameraPermissions(this)
 
     }
 
-    override fun onStart() {
-        super.onStart()
-        Log.i(LOG_TAG, "onStart, run.")
-    }
-
     override fun onResume() {
         super.onResume()
         Log.i(LOG_TAG, "onResume, run.")
-        eglManager?.let {
-            converter = ExternalTextureConverter(it.context,2)
-            converter!!.setFlipY(FLIP_FRAMES_VERTICALLY)
-            converter!!.setConsumer(processor)
-        }?:let{
-            Log.e(LOG_TAG, "EglManager has not be initialized.")
-        }
-        if (PermissionHelper.cameraPermissionsGranted(this)) {
-            startCamera(CAMERA_FACING_FRONT)
-        }
+        initConverter()
+        checkPermissionAndStartCamera()
     }
 
     override fun onPause() {
         super.onPause()
         Log.i(LOG_TAG, "onPause, run.")
-        converter
-            ?.close()
-            ?:let { Log.e(LOG_TAG, "ExternalTextureConverter has not be initialized.") }
-    }
-
-    override fun onStop() {
-        super.onStop()
-        Log.i(LOG_TAG, "onStop, run.")
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
-        Log.i(LOG_TAG, "onDestroy, run.")
+        closeConverter()
     }
 
     override fun onRestart() {
         super.onRestart()
         Log.i(LOG_TAG, "onRestart, run.")
-        previewDisplayView = SurfaceView(this)
-        setupPreviewDisplayView()
+        initPreviewDisplayView()
     }
 
 
-//------------------------------------- Initialize Functions ---------------------------------------
+//------------------------------------- Processor Functions ---------------------------------------
 
 
-    private fun initializeProcessor(outputSourceStr: String) {
+    private fun initializeProcessor() {
         Log.i(LOG_TAG, "initializeProcessor: run.")
         /**
          * If we change the output stream to null, nothing will show in the screen.
@@ -176,8 +140,8 @@ class MainActivity : AppCompatActivity() {
             this,
             eglManager!!.nativeContext,
             BINARY_GRAPH_NAME,
-            INPUT_VIDEO_STREAM_NAME,
-            outputSourceStr
+            ORIGINAL_VIDEO_STREAM,
+            outputVideoStream
         )
 
         processor!!.addPacketCallback(
@@ -213,6 +177,11 @@ class MainActivity : AppCompatActivity() {
 
 //------------------------------------- Display Functions ------------------------------------------
 
+
+    private fun initPreviewDisplayView() {
+        previewDisplayView = SurfaceView(this)
+        setupPreviewDisplayView()
+    }
 
     private fun setupPreviewDisplayView() {
 
@@ -261,7 +230,15 @@ class MainActivity : AppCompatActivity() {
 //------------------------------------- Camera Functions -------------------------------------------
 
 
-    fun startCamera(cameraFacing: CameraHelper.CameraFacing) {
+    private fun checkPermissionAndStartCamera() {
+        if (PermissionHelper.cameraPermissionsGranted(this)) {
+            startCamera(CAMERA_FACING_FRONT)
+        } else {
+            Log.e(LOG_TAG, "Application doesn't have the permission to open camera.")
+        }
+    }
+
+    private fun startCamera(cameraFacing: CameraHelper.CameraFacing) {
         cameraHelper = CameraXPreviewHelper()
         cameraHelper!!.setOnCameraStartedListener(
             OnCameraStartedListener { surfaceTexture: SurfaceTexture? ->
@@ -273,5 +250,59 @@ class MainActivity : AppCompatActivity() {
             ?.startCamera(this, cameraFacing, null)
             ?:let { Log.e(LOG_TAG, "Camera Helper is NULL!") }
     }
+
+
+//------------------------------------- Converter Functions ---------------------------------------
+
+
+    private fun initConverter() {
+        eglManager?.let {
+            converter = ExternalTextureConverter(it.context,2)
+            converter!!.setFlipY(FLIP_FRAMES_VERTICALLY)
+            converter!!.setConsumer(processor)
+        }?:let{
+            Log.e(LOG_TAG, "EglManager has not be initialized.")
+        }
+    }
+
+    private fun closeConverter() {
+        converter
+            ?.close()
+            ?:let {
+                Log.e(LOG_TAG, "ExternalTextureConverter has not be initialized.")
+            }
+    }
+
+
+//------------------------------------- Event Functions --------------------------------------------
+
+
+    private fun releaseProcessingParam() {
+        closeConverter()
+        eglManager = null
+        converter = null
+        processor = null
+        previewDisplayView = null
+    }
+
+    private fun toggleOutputStream() {
+        outputVideoStream = if (outputVideoStream == PROCESSED_VIDEO_STREAM) {
+            ORIGINAL_VIDEO_STREAM
+        } else {
+            PROCESSED_VIDEO_STREAM
+        }
+    }
+
+    private fun toggleSkeletonShowing() {
+        releaseProcessingParam()
+        initPreviewDisplayView()
+        eglManager = EglManager(null)
+        toggleOutputStream()
+        initializeProcessor()
+        initConverter()
+        checkPermissionAndStartCamera()
+    }
+
+
 
 }
