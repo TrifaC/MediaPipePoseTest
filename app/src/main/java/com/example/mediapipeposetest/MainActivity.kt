@@ -16,16 +16,16 @@
 
 package com.example.mediapipeposetest
 
+import android.content.Intent
 import android.graphics.SurfaceTexture
+import android.opengl.Visibility
 import android.os.Bundle
 import android.util.Log
 import android.util.Size
-import android.view.SurfaceHolder
-import android.view.SurfaceView
-import android.view.View
-import android.view.ViewGroup
+import android.view.*
 import android.widget.Button
 import androidx.appcompat.app.AppCompatActivity
+
 import com.google.mediapipe.components.*
 import com.google.mediapipe.components.CameraHelper.OnCameraStartedListener
 import com.google.mediapipe.formats.proto.LandmarkProto.NormalizedLandmarkList
@@ -45,7 +45,10 @@ class MainActivity : AppCompatActivity() {
         const val INPUT_VIDEO_STREAM_NAME = "input_video"
         const val OUTPUT_VIDEO_STREAM_NAME = "output_video"
         const val OUTPUT_LANDMARK_STREAM_NAME = "pose_landmarks"
-        val CAMERA_FACING: CameraHelper.CameraFacing = CameraHelper.CameraFacing.BACK
+
+        val CAMERA_FACING_BACK: CameraHelper.CameraFacing = CameraHelper.CameraFacing.BACK
+        val CAMERA_FACING_FRONT: CameraHelper.CameraFacing = CameraHelper.CameraFacing.FRONT
+
         const val FLIP_FRAMES_VERTICALLY = false
 
         init {
@@ -79,10 +82,17 @@ class MainActivity : AppCompatActivity() {
 
 
     override fun onCreate(savedInstanceState: Bundle?) {
+
         super.onCreate(savedInstanceState)
+        Log.i(LOG_TAG, "onCreate, Run.")
+
         setContentView(R.layout.activity_main)
 
         skeletonShowingBtn = findViewById(R.id.skeletonShowingBtn)
+
+        skeletonShowingBtn.setOnClickListener {
+
+        }
 
         previewDisplayView = SurfaceView(this)
         setupPreviewDisplayView()
@@ -90,6 +100,64 @@ class MainActivity : AppCompatActivity() {
         AndroidAssetUtil.initializeNativeAssetManager(this)
         eglManager = EglManager(null)
 
+        initializeProcessor(OUTPUT_VIDEO_STREAM_NAME)
+
+        // Request Camera Permission.
+        PermissionHelper.checkAndRequestCameraPermissions(this)
+
+    }
+
+    override fun onStart() {
+        super.onStart()
+        Log.i(LOG_TAG, "onStart, run.")
+    }
+
+    override fun onResume() {
+        super.onResume()
+        Log.i(LOG_TAG, "onResume, run.")
+        eglManager?.let {
+            converter = ExternalTextureConverter(it.context,2)
+            converter!!.setFlipY(FLIP_FRAMES_VERTICALLY)
+            converter!!.setConsumer(processor)
+        }?:let{
+            Log.e(LOG_TAG, "EglManager has not be initialized.")
+        }
+
+        if (PermissionHelper.cameraPermissionsGranted(this)) {
+            startCamera(CAMERA_FACING_FRONT)
+        }
+    }
+
+    override fun onPause() {
+        super.onPause()
+        Log.i(LOG_TAG, "onPause, run.")
+
+        converter?.close() ?:let { Log.e(LOG_TAG, "ExternalTextureConverter has not be initialized.") }
+    }
+
+    override fun onStop() {
+        super.onStop()
+        Log.i(LOG_TAG, "onStop, run.")
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        Log.i(LOG_TAG, "onDestroy, run.")
+    }
+
+    override fun onRestart() {
+        super.onRestart()
+        Log.i(LOG_TAG, "onRestart, run.")
+        previewDisplayView = SurfaceView(this)
+        setupPreviewDisplayView()
+    }
+
+
+//------------------------------------- Initialize Functions ---------------------------------------
+
+
+    private fun initializeProcessor(outputSourceStr: String) {
+        Log.i(LOG_TAG, "initializeProcessor: run.")
         /**
          * If we change the output stream to null, nothing will show in the screen.
          * If we change the output stream to OUTPUT_VIDEO_STREAM_NAME, skeleton will show.
@@ -100,7 +168,7 @@ class MainActivity : AppCompatActivity() {
             eglManager!!.nativeContext,
             BINARY_GRAPH_NAME,
             INPUT_VIDEO_STREAM_NAME,
-            OUTPUT_VIDEO_STREAM_NAME
+            outputSourceStr
         )
 
         processor!!.addPacketCallback(
@@ -110,38 +178,17 @@ class MainActivity : AppCompatActivity() {
             try {
                 val poseLandmarks = PacketGetter.getProtoBytes(packet)
                 val landmarks: NormalizedLandmarkList = NormalizedLandmarkList.parseFrom(poseLandmarks)
-                // Log.i(LOG_TAG, "[TS:" + packet.timestamp + "] ${landmarks}" )
-                Log.i(LOG_TAG, "The length of landmarks is ${landmarks.landmarkCount}")
+                val noseX = landmarks.landmarkList[0].x
+                val noseY = landmarks.landmarkList[0].y
+                val noseVisibility = landmarks.landmarkList[0].visibility
+                Log.i(LOG_TAG, "The nose x: $noseX, nose y: $noseY, nose visibility: $noseVisibility")
             } catch (exception: InvalidProtocolBufferException) {
                 Log.e(LOG_TAG, "Failed to get proto.", exception)
             }
         }
-
-        skeletonShowingBtn.setOnClickListener {
-        }
-
-        // Request Camera Permission.
-        PermissionHelper.checkAndRequestCameraPermissions(this)
     }
 
-    override fun onResume() {
-        super.onResume()
-        eglManager?.let {
-            converter = ExternalTextureConverter(it.context,2)
-            converter!!.setFlipY(FLIP_FRAMES_VERTICALLY)
-            converter!!.setConsumer(processor)
-        }?:let{
-            Log.e(LOG_TAG, "EglManager has not be initialized.")
-        }
-        if (PermissionHelper.cameraPermissionsGranted(this)) {
-            startCamera()
-        }
-    }
 
-    override fun onPause() {
-        super.onPause()
-        converter?.close() ?:let { Log.e(LOG_TAG, "ExternalTextureConverter has not be initialized.") }
-    }
 
 //------------------------------------- Permission Functions ---------------------------------------
 
@@ -163,10 +210,12 @@ class MainActivity : AppCompatActivity() {
 
         previewDisplayView?.visibility = View.GONE
         val viewGroup: ViewGroup = findViewById(R.id.preview_display_layout)
+        viewGroup.removeAllViews()
         viewGroup.addView(previewDisplayView)
 
         previewDisplayView?.holder?.addCallback(object : SurfaceHolder.Callback {
             override fun surfaceCreated(holder: SurfaceHolder) {
+                Log.i(LOG_TAG, "surfaceCreated: run.")
                 processor?.videoSurfaceOutput?.setSurface(holder.surface)
             }
             override fun surfaceChanged(
@@ -175,12 +224,15 @@ class MainActivity : AppCompatActivity() {
                 width: Int,
                 height: Int
             ) {
+                Log.i(LOG_TAG, "surfaceChanged: run.")
                 // (Re-)Compute the ideal size of the camera-preview display (the area that the
                 // camera-preview frames get rendered onto, potentially with scaling and rotation)
                 // based on the size of the SurfaceView that contains the display.
                 val viewSize = Size(width, height)
                 val displaySize: Size = cameraHelper!!.computeDisplaySizeFromViewSize(viewSize)
+
                 // The camera will rotate the image, so we should rotate back to correct direction.
+                // Get the frame size which captures from camera.
                 val rotatedDisplaySize: Size = Size(displaySize.height, displaySize.width)
 
                 // Connect the converter to the camera-preview frames as its input (via
@@ -191,6 +243,7 @@ class MainActivity : AppCompatActivity() {
                 )
             }
             override fun surfaceDestroyed(holder: SurfaceHolder) {
+                Log.i(LOG_TAG, "surfaceDestroyed, run.")
                 processor?.videoSurfaceOutput?.setSurface(null)
             }
         })
@@ -200,7 +253,7 @@ class MainActivity : AppCompatActivity() {
 //------------------------------------- Camera Functions -------------------------------------------
 
 
-    fun startCamera() {
+    fun startCamera(cameraFacing: CameraHelper.CameraFacing) {
         cameraHelper = CameraXPreviewHelper()
         cameraHelper!!.setOnCameraStartedListener(
             OnCameraStartedListener { surfaceTexture: SurfaceTexture? ->
@@ -209,22 +262,8 @@ class MainActivity : AppCompatActivity() {
                 previewDisplayView!!.visibility = View.VISIBLE
             })
         cameraHelper
-            ?.startCamera(this, CAMERA_FACING, null)
+            ?.startCamera(this, cameraFacing, null)
             ?:let { Log.e(LOG_TAG, "Camera Helper is NULL!") }
-    }
-
-
-//------------------------------------- Pose Landmark ----------------------------------------------
-
-
-    private fun getPoseLandmarksDebugString(poseLandmarks: NormalizedLandmarkList): String? {
-        var poseLandmarkStr = """ Pose landmarks: ${poseLandmarks.landmarkCount} """.trimIndent()
-        var landmarkIndex = 0
-        for (landmark in poseLandmarks.landmarkList) {
-            poseLandmarkStr += """ Landmark [$landmarkIndex]: (${landmark.x}, ${landmark.y}, ${landmark.z}) """
-            ++landmarkIndex
-        }
-        return poseLandmarkStr
     }
 
 }
