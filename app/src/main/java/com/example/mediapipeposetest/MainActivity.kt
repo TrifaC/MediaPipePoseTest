@@ -33,31 +33,24 @@ import com.google.mediapipe.framework.PacketGetter
 import com.google.mediapipe.glutil.EglManager
 import com.google.protobuf.InvalidProtocolBufferException
 
+import com.example.mediapipeposetest.constants.*
+
 
 class MainActivity : AppCompatActivity() {
 
     companion object {
         const val LOG_TAG: String = "MainActivity"
-
-        const val BINARY_GRAPH_NAME = "pose_tracking_gpu.binarypb"
-        const val ORIGINAL_VIDEO_STREAM = "input_video"
-        const val PROCESSED_VIDEO_STREAM = "output_video"
-        const val OUTPUT_LANDMARK_STREAM_NAME = "pose_landmarks"
-
-        val CAMERA_FACING_BACK: CameraHelper.CameraFacing = CameraHelper.CameraFacing.BACK
-        val CAMERA_FACING_FRONT: CameraHelper.CameraFacing = CameraHelper.CameraFacing.FRONT
-
-        var outputVideoStream: String = PROCESSED_VIDEO_STREAM
-
-        const val FLIP_FRAMES_VERTICALLY = false
-
         init {
             System.loadLibrary("mediapipe_jni")
             System.loadLibrary("opencv_java3")
         }
     }
 
-    private lateinit var skeletonShowingBtn: Button
+    var outputVideoStream: String = PROCESSED_VIDEO_STREAM
+    var cameraFacing: CameraHelper.CameraFacing = CAMERA_FACING_FRONT
+
+    private lateinit var skeletonToggleBtn: Button
+    private lateinit var cameraToggleBtn: Button
 
     /** Camera Showing in Activity. */
     // {@link SurfaceTexture} where the camera-preview frames can be accessed.
@@ -88,9 +81,13 @@ class MainActivity : AppCompatActivity() {
 
         setContentView(R.layout.activity_main)
 
-        skeletonShowingBtn = findViewById(R.id.skeletonShowingBtn)
-        skeletonShowingBtn.setOnClickListener {
+        skeletonToggleBtn = findViewById(R.id.skeletonToggleBtn)
+        cameraToggleBtn = findViewById(R.id.cameraToggleBtn)
+        skeletonToggleBtn.setOnClickListener {
             toggleSkeletonShowing()
+        }
+        cameraToggleBtn.setOnClickListener {
+            toggleCamera()
         }
 
         previewDisplayView = SurfaceView(this)
@@ -159,7 +156,6 @@ class MainActivity : AppCompatActivity() {
             }
         }
     }
-
 
 
 //------------------------------------- Permission Functions ---------------------------------------
@@ -232,7 +228,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun checkPermissionAndStartCamera() {
         if (PermissionHelper.cameraPermissionsGranted(this)) {
-            startCamera(CAMERA_FACING_FRONT)
+            startCamera(cameraFacing)
         } else {
             Log.e(LOG_TAG, "Application doesn't have the permission to open camera.")
         }
@@ -293,6 +289,14 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun toggleCameraInput() {
+        cameraFacing = if (cameraFacing == CAMERA_FACING_FRONT) {
+            CAMERA_FACING_BACK
+        } else {
+            CAMERA_FACING_FRONT
+        }
+    }
+
     private fun toggleSkeletonShowing() {
         releaseProcessingParam()
         initPreviewDisplayView()
@@ -300,6 +304,13 @@ class MainActivity : AppCompatActivity() {
         toggleOutputStream()
         initializeProcessor()
         initConverter()
+        checkPermissionAndStartCamera()
+    }
+
+    private fun toggleCamera() {
+        previewDisplayView = null
+        initPreviewDisplayView()
+        toggleCameraInput()
         checkPermissionAndStartCamera()
     }
 

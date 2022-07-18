@@ -8,12 +8,22 @@
     tools:context=".MainActivity">
 
     <Button
-        android:id="@+id/skeletonShowingBtn"
+        android:id="@+id/cameraToggleBtn"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="8dp"
         android:layout_marginEnd="16dp"
-        android:text="Skeleton Show"
+        android:text="Toggle Camera"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/skeletonToggleBtn" />
+
+    <Button
+        android:id="@+id/skeletonToggleBtn"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:layout_marginEnd="16dp"
+        android:text="Toggle Skeleton Show"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
 
